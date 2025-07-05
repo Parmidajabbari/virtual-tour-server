@@ -6,16 +6,19 @@ const fs = require("fs-extra");
 const path = require("path");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
+// Setup public static files
+const uploadsDir = path.join(__dirname, "uploads");
+app.use("/uploads", express.static(uploadsDir));
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
 
+// Multer config for storing uploaded files
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const id = req.tourId || uuidv4();
-    const dir = `uploads/${id}`;
+    const dir = path.join(uploadsDir, id);
     fs.ensureDirSync(dir);
     req.tourId = id;
     cb(null, dir);
@@ -26,6 +29,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Upload route
 app.post("/api/upload", upload.array("images", 20), (req, res) => {
   const tourId = req.tourId;
   const imageFiles = req.files.map((f) => `/uploads/${tourId}/${f.filename}`);
@@ -52,17 +56,20 @@ app.post("/api/upload", upload.array("images", 20), (req, res) => {
     return node;
   });
 
-  fs.writeJSONSync(`uploads/${tourId}/nodes.json`, nodes);
+  const jsonPath = path.join(uploadsDir, tourId, "nodes.json");
+  fs.writeJSONSync(jsonPath, nodes);
   res.json({ tourId });
 });
 
+// Get virtual tour config
 app.get("/api/tour/:id", (req, res) => {
-  const nodesPath = `uploads/${req.params.id}/nodes.json`;
-  if (!fs.existsSync(nodesPath)) {
+  const jsonPath = path.join(uploadsDir, req.params.id, "nodes.json");
+  if (!fs.existsSync(jsonPath)) {
     return res.status(404).json({ error: "Tour not found" });
   }
-  const nodes = fs.readJSONSync(nodesPath);
+  const nodes = fs.readJSONSync(jsonPath);
   res.json(nodes);
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// Start server
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
